@@ -1,0 +1,45 @@
+defaults: &defaults
+  docker:
+    - image: circleci/python:3.6-node-browsers
+  working_directory: ~/workdir
+
+version: 2
+jobs:
+
+  build:
+    <<: *defaults
+    steps:
+      - checkout
+      - run: echo "Hello World. Deployed at `date`" > public/index.html
+ 
+      - persist_to_workspace:
+          root: .
+          paths: public
+
+  deploy:
+    <<: *defaults
+    steps:
+      - checkout
+      - attach_workspace:
+          at: .
+      - run:
+          name: Install awscli
+          command: sudo pip install awscli
+      - run:
+          name: Deploy to S3
+          command: aws s3 sync public/ s3://${S3_BUCKET_NAME}/ --delete
+      - run:
+          name: Invalidate CDN Cache
+          command: aws cloudfront create-invalidation --distribution-id ${CLOUDFRONT_DISTRIBUTION_ID} --paths '/*'
+
+workflows:
+  version: 2
+  build-deploy:
+    jobs:
+      - build
+      - deploy:
+          requires:
+            - build    
+          filters:
+            branches:
+              only: master
